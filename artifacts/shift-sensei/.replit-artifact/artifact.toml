@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "シフト先生"
+version = "1.0.0"
+id = "artifacts/shift-sensei"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23235
+
+[services.development]
+run = "pnpm --filter @workspace/shift-sensei run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/shift-sensei", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/shift-sensei/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23235"
+BASE_PATH = "/"

@@ -1,0 +1,1917 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification for Shift Sensei (シフト先生) - a fast monthly shift-scheduling tool for nursing home unit leaders
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: staff
+    description: Staff member management
+  - name: shifts
+    description: Scheduled shift management
+  - name: shift-types
+    description: Editable shift type / stamp definitions
+  - name: summary
+    description: Monthly summary reporting
+  - name: schedule-settings
+    description: Month-End Check settings used by the recommendation engine
+  - name: units
+    description: Units (e.g. East/West) that can own a night's shift
+  - name: night-duty-ownership
+    description: Internal night-duty ownership assignment (schema/API only, no UI yet)
+  - name: ai-consult
+    description: AI相談 chat prototype (placeholder logic, no real AI yet)
+  - name: recommendations
+    description: Recommendation engine output for a given month
+  - name: facility-rules
+    description: >
+      Facility-specific staffing rules (施設ルール), stored as data and
+      evaluated by a generic rule engine — not hardcoded per-rule logic
+  - name: day-remarks
+    description: One free-text 備考 (remarks) field per calendar date
+  - name: day-staffing-status
+    description: >
+      Per-day understaffing severity for the shift grid's date headers,
+      derived only from enabled staffing_count facility rules
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /staff:
+    get:
+      operationId: listStaff
+      tags: [staff]
+      summary: List all staff members
+      responses:
+        "200":
+          description: List of staff members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Staff"
+    post:
+      operationId: createStaff
+      tags: [staff]
+      summary: Create a staff member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffInput"
+      responses:
+        "201":
+          description: Created staff member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Staff"
+
+  /staff/reorder:
+    post:
+      operationId: reorderStaff
+      tags: [staff]
+      summary: Set the display order of staff, which also drives the schedule grid's row order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffReorderBody"
+      responses:
+        "200":
+          description: Staff members in their new order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Staff"
+
+  /staff/{id}:
+    patch:
+      operationId: updateStaff
+      tags: [staff]
+      summary: Update a staff member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffUpdate"
+      responses:
+        "200":
+          description: Updated staff member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Staff"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteStaff
+      tags: [staff]
+      summary: Delete a staff member
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /shifts:
+    get:
+      operationId: listShifts
+      tags: [shifts]
+      summary: List shifts, optionally filtered by month and/or staff member
+      parameters:
+        - name: month
+          in: query
+          required: false
+          description: "Filter by month in YYYY-MM format"
+          schema:
+            type: string
+        - name: staffId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of shifts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Shift"
+    post:
+      operationId: createShift
+      tags: [shifts]
+      summary: Create a scheduled shift
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShiftInput"
+      responses:
+        "201":
+          description: Created shift
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shift"
+
+  /shifts/{id}:
+    patch:
+      operationId: updateShift
+      tags: [shifts]
+      summary: Update a scheduled shift
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShiftUpdate"
+      responses:
+        "200":
+          description: Updated shift
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Shift"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteShift
+      tags: [shifts]
+      summary: Delete a scheduled shift
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /shifts/reset-month:
+    post:
+      operationId: resetShiftMonth
+      tags: [shifts]
+      summary: >
+        Delete all non-constraint shifts for a month.
+        Preserves hope_off, paid_leave, and attendance constraints,
+        night-duty ownership marks, and day remarks.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetShiftMonthInput"
+      responses:
+        "200":
+          description: Reset complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetShiftMonthResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /data-management/wipe:
+    post:
+      operationId: wipeMonthData
+      tags: [data-management]
+      summary: >
+        Permanently delete selected categories of data for a given month.
+        targets controls which categories are wiped: shifts (non-constraint),
+        constraints (hope_off/paid_leave/attendance), nightDutyOwnership, dayRemarks.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WipeMonthDataBody"
+      responses:
+        "200":
+          description: Wipe complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WipeMonthDataResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /shifts/months:
+    get:
+      operationId: listShiftMonths
+      tags: [shifts]
+      summary: List distinct months (YYYY-MM) that have at least one saved shift, ascending
+      responses:
+        "200":
+          description: List of months with saved shift data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  description: "Month in YYYY-MM format"
+
+  /shift-types:
+    get:
+      operationId: listShiftTypes
+      tags: [shift-types]
+      summary: List all shift types, ordered by their display/sort order
+      responses:
+        "200":
+          description: List of shift types
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShiftType"
+    post:
+      operationId: createShiftType
+      tags: [shift-types]
+      summary: Create a shift type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShiftTypeInput"
+      responses:
+        "201":
+          description: Created shift type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShiftType"
+
+  /shift-types/reorder:
+    post:
+      operationId: reorderShiftTypes
+      tags: [shift-types]
+      summary: Set the display/sort order of shift types
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShiftTypeReorderBody"
+      responses:
+        "200":
+          description: Shift types in their new order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShiftType"
+
+  /shift-types/{id}:
+    patch:
+      operationId: updateShiftType
+      tags: [shift-types]
+      summary: Update a shift type
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShiftTypeUpdate"
+      responses:
+        "200":
+          description: Updated shift type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShiftType"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteShiftType
+      tags: [shift-types]
+      summary: Delete a shift type
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /summary:
+    get:
+      operationId: getMonthlySummary
+      tags: [summary]
+      summary: Get monthly per-staff counts of each shift stamp code
+      parameters:
+        - name: month
+          in: query
+          required: true
+          description: "Month in YYYY-MM format"
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Monthly summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlySummary"
+
+  /schedule-settings:
+    get:
+      operationId: getScheduleSettings
+      tags: [schedule-settings]
+      summary: Get the Month-End Check settings (created with defaults on first read)
+      responses:
+        "200":
+          description: Current schedule settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleSettings"
+    patch:
+      operationId: updateScheduleSettings
+      tags: [schedule-settings]
+      summary: Update the Month-End Check settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleSettingsUpdate"
+      responses:
+        "200":
+          description: Updated schedule settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleSettings"
+
+  /units:
+    get:
+      operationId: listUnits
+      tags: [units]
+      summary: List units that can own a night's shift
+      responses:
+        "200":
+          description: List of units
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Unit"
+    post:
+      operationId: createUnit
+      tags: [units]
+      summary: Create a unit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnitInput"
+      responses:
+        "201":
+          description: Created unit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Unit"
+
+  /units/{id}:
+    patch:
+      operationId: updateUnit
+      tags: [units]
+      summary: Update a unit
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UnitInput"
+      responses:
+        "200":
+          description: Updated unit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Unit"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteUnit
+      tags: [units]
+      summary: Delete a unit
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /night-duty-ownership:
+    get:
+      operationId: listNightDutyOwnership
+      tags: [night-duty-ownership]
+      summary: List night-duty ownership records, optionally filtered by month
+      parameters:
+        - name: month
+          in: query
+          required: false
+          description: "Filter by month in YYYY-MM format"
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of night-duty ownership records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NightDutyOwnership"
+    post:
+      operationId: upsertNightDutyOwnership
+      tags: [night-duty-ownership]
+      summary: Set (or clear) which unit owns a given night, by date
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NightDutyOwnershipInput"
+      responses:
+        "200":
+          description: The night-duty ownership record for that date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NightDutyOwnership"
+
+  /day-remarks:
+    get:
+      operationId: listDayRemarks
+      tags: [day-remarks]
+      summary: List 備考 (remarks) records, optionally filtered by month
+      parameters:
+        - name: month
+          in: query
+          required: false
+          description: "Filter by month in YYYY-MM format"
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of remarks records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DayRemark"
+    post:
+      operationId: upsertDayRemark
+      tags: [day-remarks]
+      summary: Set (or clear) the 備考 text for a given date
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DayRemarkInput"
+      responses:
+        "200":
+          description: The remarks record for that date, or null if cleared to empty
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/DayRemark"
+                  - type: "null"
+
+  /day-staffing-status:
+    get:
+      operationId: listDayStaffingStatus
+      tags: [day-staffing-status]
+      summary: >
+        Per-day understaffing severity for a month, derived only from
+        enabled staffing_count facility rules. Dates with no finding are
+        omitted (treat as normal).
+      parameters:
+        - name: month
+          in: query
+          required: true
+          description: "Month in YYYY-MM format"
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of per-day severities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DayStaffingStatus"
+
+  /ai-consult/messages:
+    get:
+      operationId: listAiConsultMessages
+      tags: [ai-consult]
+      summary: List the AI相談 chat history, oldest first
+      responses:
+        "200":
+          description: Chat history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AiConsultMessage"
+    post:
+      operationId: sendAiConsultMessage
+      tags: [ai-consult]
+      summary: Send a user message and receive the assistant's (placeholder-logic) reply
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiConsultMessageInput"
+      responses:
+        "201":
+          description: The saved user message and the assistant's reply
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiConsultReply"
+
+  /ai-consult/messages/{id}/execute:
+    post:
+      operationId: executeAiConsultPlan
+      tags: [ai-consult]
+      summary: >
+        Apply the change-set ("plan") carried in an assistant message's
+        intentPayload (Partial AI Execution). Re-verifies every planned
+        cell is still blank and unlocked before writing it, so nothing
+        the manager touched in the meantime gets overwritten.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The updated assistant message, with the plan marked applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiConsultMessage"
+
+  /ai-consult/messages/{id}/save-rule:
+    post:
+      operationId: saveAiConsultProposedRule
+      tags: [ai-consult]
+      summary: >
+        Save the facility rule proposed in an assistant message's
+        intentPayload (Teach Shift Sensei) as a new "learned" facility
+        rule.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The updated assistant message, with the proposed rule marked saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiConsultMessage"
+
+  /ai-consult/messages/{id}/dismiss:
+    post:
+      operationId: dismissAiConsultSuggestion
+      tags: [ai-consult]
+      summary: >
+        Dismiss a pending plan (Partial AI Execution) or proposed rule
+        (Teach Shift Sensei) carried in an assistant message without
+        applying it.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The updated assistant message, with the suggestion marked dismissed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiConsultMessage"
+
+  /recommendations:
+    get:
+      operationId: getRecommendations
+      tags: [recommendations]
+      summary: Evaluate a month's schedule and return recommendation objects
+      parameters:
+        - name: month
+          in: query
+          required: true
+          description: "Month in YYYY-MM format"
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Recommendations for the month
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Recommendation"
+
+  /facility-rules:
+    get:
+      operationId: listFacilityRules
+      tags: [facility-rules]
+      summary: List facility rules, optionally filtered by unit
+      parameters:
+        - name: unitId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of facility rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FacilityRule"
+    post:
+      operationId: createFacilityRule
+      tags: [facility-rules]
+      summary: Create a facility rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FacilityRuleInput"
+      responses:
+        "201":
+          description: Created facility rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacilityRule"
+
+  /facility-rules/{id}:
+    patch:
+      operationId: updateFacilityRule
+      tags: [facility-rules]
+      summary: Update (or toggle enabled on) a facility rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FacilityRuleUpdate"
+      responses:
+        "200":
+          description: Updated facility rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacilityRule"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteFacilityRule
+      tags: [facility-rules]
+      summary: Delete a facility rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    Staff:
+      type: object
+      required:
+        [
+          id,
+          name,
+          color,
+          shortLabel,
+          isLeader,
+          availableShiftTypeIds,
+          nightShiftAvailable,
+          maxShifts,
+          sortOrder,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        shortLabel:
+          type: string
+          description: "1-3 character label rendered on the schedule grid's staff row"
+        color:
+          type: string
+          description: "Hex color used to identify this staff member in the shift table"
+        isLeader:
+          type: boolean
+          description: "Marks a unit leader. Storage only; not yet used elsewhere in the app"
+        availableShiftTypeIds:
+          description: >
+            Reserved for a future "which shift types this staff member can be
+            assigned" restriction. Null/empty means no restriction. Not enforced
+            anywhere yet.
+          oneOf:
+            - type: array
+              items:
+                type: integer
+            - type: "null"
+        nightShiftAvailable:
+          type: boolean
+          description: "Reserved for a future night-shift eligibility rule."
+        maxShifts:
+          description: "Reserved for a future per-staff monthly shift-count cap."
+          oneOf:
+            - type: integer
+            - type: "null"
+        sortOrder:
+          type: integer
+          description: "Drives staff row order in Staff Management and on the schedule grid"
+        createdAt:
+          type: string
+          format: date-time
+
+    StaffInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        shortLabel:
+          type: string
+          minLength: 1
+          maxLength: 3
+        color:
+          type: string
+        isLeader:
+          type: boolean
+        availableShiftTypeIds:
+          type: array
+          items:
+            type: integer
+        nightShiftAvailable:
+          type: boolean
+        maxShifts:
+          oneOf:
+            - type: integer
+            - type: "null"
+        sortOrder:
+          type: integer
+
+    StaffUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        shortLabel:
+          type: string
+          minLength: 1
+          maxLength: 3
+        color:
+          type: string
+        isLeader:
+          type: boolean
+        availableShiftTypeIds:
+          oneOf:
+            - type: array
+              items:
+                type: integer
+            - type: "null"
+        nightShiftAvailable:
+          type: boolean
+        maxShifts:
+          oneOf:
+            - type: integer
+            - type: "null"
+        sortOrder:
+          type: integer
+
+    StaffReorderBody:
+      type: object
+      description: "Full list of staff ids in their new display/row order"
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+          minItems: 1
+          description: "Staff ids in the desired order"
+
+    ShiftCode:
+      type: string
+      minLength: 1
+      description: >
+        Shift stamp code placed on the shift table for a given staff member
+        and date. References a ShiftType's `code` by value — the set of
+        valid codes is editable in Settings ("シフト種別"), not a fixed enum.
+
+    ShiftTypeCategory:
+      type: string
+      description: >
+        Broad bucket a shift type belongs to. Not currently used to enforce
+        any scheduling rule (e.g. consecutive-work limits) — it only shapes
+        the data so such rules can be added later.
+      enum: [day_shift, night_shift, after_night, holiday, paid_leave, other]
+
+    ShiftType:
+      type: object
+      description: "An editable shift type / stamp definition shown in the schedule grid's toolbar"
+      required:
+        [
+          id,
+          code,
+          name,
+          shortLabel,
+          bgColor,
+          textColor,
+          startTime,
+          endTime,
+          workingHours,
+          category,
+          sortOrder,
+          countsAsConsecutiveWork,
+          canAiAutoAssign,
+          includeInMonthlyStats,
+          constraintOnly,
+          balanceTolerance,
+          createdAt,
+        ]
+      properties:
+        id:
+          type: integer
+        code:
+          type: string
+          description: "Unique value stored in Shift.code when this type is assigned"
+        name:
+          type: string
+        shortLabel:
+          type: string
+          description: "1-3 character label rendered on the stamp/grid cell"
+        bgColor:
+          type: string
+          description: "Hex background color for the stamp"
+        textColor:
+          type: string
+          description: "Hex text color for the stamp"
+        startTime:
+          oneOf:
+            - type: string
+            - type: "null"
+        endTime:
+          oneOf:
+            - type: string
+            - type: "null"
+        workingHours:
+          description: "Working hours this shift type counts toward, if any"
+          oneOf:
+            - type: number
+            - type: "null"
+        category:
+          $ref: "#/components/schemas/ShiftTypeCategory"
+        sortOrder:
+          type: integer
+        countsAsConsecutiveWork:
+          type: boolean
+          description: >
+            AI Settings: whether a day stamped with this shift type counts
+            toward consecutive-work-day calculations. Used today by Shift
+            Sensei's consecutive-work calculations.
+        canAiAutoAssign:
+          type: boolean
+          description: >
+            AI Settings: whether an automated scheduler may assign this
+            shift type on its own. Not enforced anywhere yet — reserved for
+            future automatic scheduling.
+        includeInMonthlyStats:
+          type: boolean
+          description: >
+            AI Settings: whether this shift type is counted in monthly
+            workload/balance statistics. Not enforced anywhere yet.
+        constraintOnly:
+          type: boolean
+          description: >
+            AI Settings: marks a shift type that only ever represents a
+            constraint (e.g. a hope-off/must-work marker), never a real
+            assignable work shift. Not enforced anywhere yet.
+        balanceTolerance:
+          type: integer
+          description: >
+            Acceptable difference (±) from the per-staff average count of
+            this shift type in a month, used by the recommendation engine's
+            shift-balance check. Edited on the Month-End Check Settings
+            page.
+        createdAt:
+          type: string
+          format: date-time
+
+    ShiftTypeInput:
+      type: object
+      required: [code, name, shortLabel, category]
+      properties:
+        code:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+        shortLabel:
+          type: string
+          minLength: 1
+          maxLength: 3
+        bgColor:
+          type: string
+        textColor:
+          type: string
+        startTime:
+          oneOf:
+            - type: string
+            - type: "null"
+        endTime:
+          oneOf:
+            - type: string
+            - type: "null"
+        workingHours:
+          oneOf:
+            - type: number
+            - type: "null"
+        category:
+          $ref: "#/components/schemas/ShiftTypeCategory"
+        sortOrder:
+          type: integer
+        countsAsConsecutiveWork:
+          type: boolean
+        canAiAutoAssign:
+          type: boolean
+        includeInMonthlyStats:
+          type: boolean
+        constraintOnly:
+          type: boolean
+        balanceTolerance:
+          type: integer
+
+    ShiftTypeUpdate:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+        name:
+          type: string
+          minLength: 1
+        shortLabel:
+          type: string
+          minLength: 1
+          maxLength: 3
+        bgColor:
+          type: string
+        textColor:
+          type: string
+        startTime:
+          oneOf:
+            - type: string
+            - type: "null"
+        endTime:
+          oneOf:
+            - type: string
+            - type: "null"
+        workingHours:
+          oneOf:
+            - type: number
+            - type: "null"
+        category:
+          $ref: "#/components/schemas/ShiftTypeCategory"
+        sortOrder:
+          type: integer
+        countsAsConsecutiveWork:
+          type: boolean
+        canAiAutoAssign:
+          type: boolean
+        includeInMonthlyStats:
+          type: boolean
+        constraintOnly:
+          type: boolean
+        balanceTolerance:
+          type: integer
+
+    ShiftTypeReorderBody:
+      type: object
+      description: "Full list of shift type ids in their new display order"
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+          minItems: 1
+
+    ResetShiftMonthInput:
+      type: object
+      required: [month]
+      properties:
+        month:
+          type: string
+          description: "Month to reset in YYYY-MM format"
+
+    ResetShiftMonthResult:
+      type: object
+      required: [deletedCount]
+      properties:
+        deletedCount:
+          type: integer
+          description: Number of shift records deleted
+
+    WipeMonthDataTarget:
+      type: string
+      enum: [shifts, constraints, nightDutyOwnership, dayRemarks]
+
+    WipeMonthDataBody:
+      type: object
+      required: [month, targets]
+      properties:
+        month:
+          type: string
+          description: "Month in YYYY-MM format"
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/WipeMonthDataTarget"
+          minItems: 1
+
+    WipeMonthDataResult:
+      type: object
+      required: [deletedShifts, deletedConstraints, deletedNightDutyOwnership, deletedDayRemarks]
+      properties:
+        deletedShifts:
+          type: integer
+        deletedConstraints:
+          type: integer
+        deletedNightDutyOwnership:
+          type: integer
+        deletedDayRemarks:
+          type: integer
+
+    ConstraintType:
+      type: string
+      description: >
+        A protected scheduling constraint entered in the dedicated
+        "制約入力" phase, before normal shifts are assigned:
+        "hope_off" (休み固定) forces code to the "holiday"-category shift
+        type's code (originally "休み") and fully locks the cell (immutable
+        except via the one-tap remove gesture); "paid_leave" (有給固定) is
+        the same, but forces code to the "paid_leave"-category shift type's
+        code (originally "有休"); "attendance" (📌 出勤) locks the cell
+        against deletion but leaves code null until a normal shift is
+        assigned on top of it later.
+      enum: [hope_off, attendance, paid_leave]
+
+    Shift:
+      type: object
+      required: [id, staffId, date, code, constraintType, locked, createdAt]
+      properties:
+        id:
+          type: integer
+        staffId:
+          type: integer
+        date:
+          type: string
+          description: "Date in YYYY-MM-DD format"
+        code:
+          description: "Null for a blank 出勤 (attendance) constraint cell with no shift assigned yet"
+          oneOf:
+            - $ref: "#/components/schemas/ShiftCode"
+            - type: "null"
+        constraintType:
+          description: "Null when this cell has no constraint applied"
+          oneOf:
+            - $ref: "#/components/schemas/ConstraintType"
+            - type: "null"
+        locked:
+          type: boolean
+          description: "Locked cells cannot be overwritten or cleared by tapping until unlocked"
+        createdAt:
+          type: string
+          format: date-time
+
+    ShiftInput:
+      type: object
+      description: >
+        Either `code` or `constraintType` must be provided. When
+        `constraintType` is set, the server derives `code` and `locked`
+        deterministically and ignores any client-supplied values for them.
+      required: [staffId, date]
+      properties:
+        staffId:
+          type: integer
+        date:
+          type: string
+        code:
+          $ref: "#/components/schemas/ShiftCode"
+        constraintType:
+          $ref: "#/components/schemas/ConstraintType"
+
+    ShiftUpdate:
+      type: object
+      description: >
+        At least one of code, constraintType, or locked must be provided.
+        Set constraintType to null to remove an existing constraint (and
+        its automatic lock).
+      properties:
+        code:
+          description: "Set to null to clear an assigned shift while keeping an attendance constraint's marker"
+          oneOf:
+            - $ref: "#/components/schemas/ShiftCode"
+            - type: "null"
+        constraintType:
+          oneOf:
+            - $ref: "#/components/schemas/ConstraintType"
+            - type: "null"
+        locked:
+          type: boolean
+
+    ShiftCodeCounts:
+      type: object
+      description: "Count of each shift stamp code for a staff member in a given month"
+      required: [A, B2, C3, D, E2, nightShift, yasumi, yuukyuu]
+      properties:
+        A:
+          type: integer
+        B2:
+          type: integer
+        C3:
+          type: integer
+        D:
+          type: integer
+        E2:
+          type: integer
+        nightShift:
+          type: integer
+          description: "Combined count of 2夜 and 特2夜"
+        yasumi:
+          type: integer
+          description: "Count of 休み"
+        yuukyuu:
+          type: integer
+          description: "Count of 有休"
+
+    StaffMonthlySummary:
+      type: object
+      required:
+        [
+          staffId,
+          staffName,
+          staffColor,
+          shiftCounts,
+        ]
+      properties:
+        staffId:
+          type: integer
+        staffName:
+          type: string
+        staffColor:
+          type: string
+        shiftCounts:
+          $ref: "#/components/schemas/ShiftCodeCounts"
+
+    MonthlySummary:
+      type: object
+      required: [month, staff]
+      properties:
+        month:
+          type: string
+        staff:
+          type: array
+          items:
+            $ref: "#/components/schemas/StaffMonthlySummary"
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    ScheduleSettings:
+      type: object
+      description: "Month-End Check settings the recommendation engine evaluates schedules against"
+      required:
+        [
+          id,
+          maxConsecutiveWorkDays,
+          countNightAfterAsConsecutive,
+          minDaysOffPerMonth,
+          nightShiftTarget,
+          nightShiftTolerance,
+          nightBalanceStaffIds,
+          updatedAt,
+        ]
+      properties:
+        id:
+          type: integer
+        maxConsecutiveWorkDays:
+          type: integer
+        countNightAfterAsConsecutive:
+          type: boolean
+          description: "Whether Night Shift + 明け count toward consecutive-work-day limits"
+        minDaysOffPerMonth:
+          type: integer
+        nightShiftTarget:
+          type: integer
+        nightShiftTolerance:
+          type: integer
+          description: "Allowed difference (±) from the night shift target"
+        nightBalanceStaffIds:
+          description: "Staff ids included in night-shift balancing. Null means all staff are included."
+          oneOf:
+            - type: array
+              items:
+                type: integer
+            - type: "null"
+        updatedAt:
+          type: string
+          format: date-time
+
+    ScheduleSettingsUpdate:
+      type: object
+      properties:
+        maxConsecutiveWorkDays:
+          type: integer
+        countNightAfterAsConsecutive:
+          type: boolean
+        minDaysOffPerMonth:
+          type: integer
+        nightShiftTarget:
+          type: integer
+        nightShiftTolerance:
+          type: integer
+        nightBalanceStaffIds:
+          oneOf:
+            - type: array
+              items:
+                type: integer
+            - type: "null"
+
+    Unit:
+      type: object
+      description: "A unit (e.g. 東棟/西棟) that can own a night's shift"
+      required: [id, name, sortOrder, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    UnitInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        sortOrder:
+          type: integer
+
+    NightDutyOwnership:
+      type: object
+      description: >
+        Internal only (no dedicated UI yet): records which unit owns a
+        given night's shift before an individual staff member is assigned.
+      required: [id, date, unitId, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          description: "Date in YYYY-MM-DD format"
+        unitId:
+          oneOf:
+            - type: integer
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    NightDutyOwnershipInput:
+      type: object
+      required: [date]
+      properties:
+        date:
+          type: string
+        unitId:
+          description: "Set to null to clear ownership for that date"
+          oneOf:
+            - type: integer
+            - type: "null"
+
+    DayRemark:
+      type: object
+      required: [id, date, text, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          description: "Date in YYYY-MM-DD format"
+        text:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DayRemarkInput:
+      type: object
+      required: [date, text]
+      properties:
+        date:
+          type: string
+        text:
+          description: "Set to an empty string to clear the remark for that date"
+          type: string
+
+    DayStaffingStatus:
+      type: object
+      required: [date, severity]
+      properties:
+        date:
+          type: string
+          description: "Date in YYYY-MM-DD format"
+        severity:
+          type: string
+          enum: [critical, warning]
+
+    AiConsultRole:
+      type: string
+      enum: [user, assistant]
+
+    AiConsultIntentType:
+      type: string
+      description: >
+        A recognized request pattern from the AI相談 chat prototype.
+        Matched against a small set of example phrasings, not a real
+        AI/LLM. Not enforced anywhere in scheduling yet — stored so a
+        future recommendation engine can consult accumulated preferences.
+      enum:
+        [
+          reduce_night_shifts,
+          fixed_shift_code,
+          weekend_off,
+          reduce_consecutive_work,
+          facility_rule_status,
+          execute_plan_request,
+          teach_candidate,
+        ]
+
+    AiConsultPlanChange:
+      type: object
+      description: "A single cell Partial AI Execution will fill in if executed."
+      required: [staffId, staffName, date, code]
+      properties:
+        staffId:
+          type: integer
+        staffName:
+          type: string
+        date:
+          type: string
+        code:
+          type: string
+
+    AiConsultExecutionPlan:
+      type: object
+      description: >
+        A preview of the change-set a Partial AI Execution request would
+        apply. Never applied automatically — the manager must confirm via
+        POST /ai-consult/messages/{id}/execute.
+      required: [changeCount, reason, changes]
+      properties:
+        changeCount:
+          type: integer
+        reason:
+          type: string
+        changes:
+          type: array
+          items:
+            $ref: "#/components/schemas/AiConsultPlanChange"
+
+    AiConsultProposedRule:
+      type: object
+      description: >
+        A facility rule "Teach Shift Sensei" proposes from a stated
+        preference. Never saved automatically — the manager must confirm
+        via POST /ai-consult/messages/{id}/save-rule.
+      required: [ruleType, name, description, config]
+      properties:
+        ruleType:
+          $ref: "#/components/schemas/FacilityRuleType"
+        name:
+          type: string
+        description:
+          type: string
+        config:
+          $ref: "#/components/schemas/FacilityRuleConfig"
+
+    AiConsultSuggestionStatus:
+      type: string
+      description: "Lifecycle of a pending plan/proposedRule carried on an assistant message."
+      enum: [pending, applied, saved, dismissed]
+
+    AiConsultIntentPayload:
+      type: object
+      description: >
+        Structured detail extracted for the matched intent. Fields are
+        optional and their meaning depends on intentType — e.g.
+        fixed_shift_code sets shiftCode, weekend_off/reduce_night_shifts/
+        reduce_consecutive_work set staffName as recognized from the text,
+        execute_plan_request sets plan (Partial AI Execution preview), and
+        teach_candidate sets proposedRule (Teach Shift Sensei suggestion).
+      properties:
+        staffName:
+          type: string
+        shiftCode:
+          type: string
+        plan:
+          oneOf:
+            - $ref: "#/components/schemas/AiConsultExecutionPlan"
+            - type: "null"
+        proposedRule:
+          oneOf:
+            - $ref: "#/components/schemas/AiConsultProposedRule"
+            - type: "null"
+        status:
+          $ref: "#/components/schemas/AiConsultSuggestionStatus"
+        appliedCount:
+          type: integer
+        skippedCount:
+          type: integer
+        savedRuleId:
+          oneOf:
+            - type: integer
+            - type: "null"
+
+    AiConsultMessage:
+      type: object
+      required: [id, role, content, staffId, intentType, intentPayload, createdAt]
+      properties:
+        id:
+          type: integer
+        role:
+          $ref: "#/components/schemas/AiConsultRole"
+        content:
+          type: string
+        staffId:
+          description: "Set only on a user message with a recognized intent referencing a staff member"
+          oneOf:
+            - type: integer
+            - type: "null"
+        intentType:
+          oneOf:
+            - $ref: "#/components/schemas/AiConsultIntentType"
+            - type: "null"
+        intentPayload:
+          description: "Structured detail for the matched intent, shape depends on intentType"
+          oneOf:
+            - $ref: "#/components/schemas/AiConsultIntentPayload"
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+
+    AiConsultMessageInput:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+          minLength: 1
+        month:
+          type: string
+          description: "The month the manager is working on, in yyyy-MM format. Used instead of the server clock so AI相談 operates on the correct month."
+
+    AiConsultReply:
+      type: object
+      description: "The saved user message plus the assistant's reply, in order"
+      required: [userMessage, assistantMessage]
+      properties:
+        userMessage:
+          $ref: "#/components/schemas/AiConsultMessage"
+        assistantMessage:
+          $ref: "#/components/schemas/AiConsultMessage"
+
+    RecommendationSeverity:
+      type: string
+      enum: [info, warning, critical]
+
+    RecommendationType:
+      type: string
+      description: "Which rule in the recommendation engine produced this recommendation"
+      enum:
+        [
+          consecutive_work,
+          days_off,
+          night_balance,
+          shift_balance,
+          required_work_pending,
+          facility_rule,
+          available_shift_violation,
+        ]
+
+    Recommendation:
+      type: object
+      description: >
+        A single structured finding from the recommendation engine. No
+        automatic fixing exists yet — this is informational only.
+      required: [severity, type, message]
+      properties:
+        severity:
+          $ref: "#/components/schemas/RecommendationSeverity"
+        type:
+          $ref: "#/components/schemas/RecommendationType"
+        message:
+          type: string
+        staffId:
+          description: "Staff member this recommendation is about, when applicable"
+          type: integer
+        date:
+          description: "Date (YYYY-MM-DD) this recommendation is about, when applicable (e.g. facility_rule findings)"
+          type: string
+        ruleId:
+          description: "Facility rule id this recommendation is about, when type is facility_rule"
+          type: integer
+
+    FacilityRuleType:
+      type: string
+      description: >
+        Selects which evaluator in the facility rule engine interprets
+        `config`. "staffing_count" requires a min/max number of staff on a
+        shift code that day, optionally gated on another code's
+        presence/absence. "staff_day_restriction" and "staff_fixed_shift"
+        are produced by "Teach Shift Sensei" from AI相談 conversation —
+        new rule types can keep being added later without breaking
+        existing rules.
+      enum: [staffing_count, staff_day_restriction, staff_fixed_shift]
+
+    FacilityRuleSource:
+      type: string
+      description: >
+        "facility" rules are configured directly on the Facility Rules
+        screen. "learned" rules were accepted from a "Teach Shift Sensei"
+        suggestion in AI相談.
+      enum: [facility, learned]
+
+    FacilityRuleCondition:
+      type: object
+      description: >
+        Gates a "staffing_count" rule to only apply on days where the
+        presence/absence of another shift code matches `mode` (e.g. only
+        require min 1 "A" on days with no "明け"). Omit entirely for a rule
+        that applies every day.
+      required: [codes, mode]
+      properties:
+        codes:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        mode:
+          type: string
+          enum: [present, absent]
+
+    FacilityRuleConfig:
+      type: object
+      description: >
+        Which fields are meaningful depends on `ruleType` — see
+        FacilityRuleType. All fields are optional so the same object shape
+        can carry the config for any rule type.
+      properties:
+        targetCodes:
+          description: "staffing_count: shift codes counted toward satisfying the rule (e.g. [\"A\"], or [\"2夜\", \"特2夜\"] to treat both as one night-shift group)"
+          type: array
+          items:
+            type: string
+          minItems: 1
+        comparison:
+          description: "staffing_count only"
+          type: string
+          enum: [min, max]
+        count:
+          description: "staffing_count only"
+          type: integer
+          minimum: 0
+        condition:
+          description: "staffing_count only"
+          oneOf:
+            - $ref: "#/components/schemas/FacilityRuleCondition"
+            - type: "null"
+        staffId:
+          description: "staff_day_restriction / staff_fixed_shift: which staff member this rule is about"
+          type: integer
+        dayOfWeek:
+          description: "staff_day_restriction only: 0 (Sunday) through 6 (Saturday)"
+          type: integer
+          minimum: 0
+          maximum: 6
+        disallowedCodes:
+          description: "staff_day_restriction only: shift codes this staff member must not receive on dayOfWeek"
+          type: array
+          items:
+            type: string
+        allowedCodes:
+          description: "staff_fixed_shift only: the only shift codes this staff member should receive (holiday/paid-leave codes are always allowed)"
+          type: array
+          items:
+            type: string
+
+    FacilityRule:
+      type: object
+      required: [id, unitId, ruleType, source, name, description, enabled, config, sortOrder, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        unitId:
+          oneOf:
+            - type: integer
+            - type: "null"
+        ruleType:
+          $ref: "#/components/schemas/FacilityRuleType"
+        source:
+          $ref: "#/components/schemas/FacilityRuleSource"
+        name:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+        config:
+          $ref: "#/components/schemas/FacilityRuleConfig"
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    FacilityRuleInput:
+      type: object
+      required: [name, config]
+      properties:
+        unitId:
+          oneOf:
+            - type: integer
+            - type: "null"
+        ruleType:
+          $ref: "#/components/schemas/FacilityRuleType"
+        source:
+          $ref: "#/components/schemas/FacilityRuleSource"
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        enabled:
+          type: boolean
+        config:
+          $ref: "#/components/schemas/FacilityRuleConfig"
+        sortOrder:
+          type: integer
+
+    FacilityRuleUpdate:
+      type: object
+      description: "All fields optional — used both for full edits and for a bare {enabled} toggle"
+      properties:
+        unitId:
+          oneOf:
+            - type: integer
+            - type: "null"
+        ruleType:
+          $ref: "#/components/schemas/FacilityRuleType"
+        source:
+          $ref: "#/components/schemas/FacilityRuleSource"
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        enabled:
+          type: boolean
+        config:
+          $ref: "#/components/schemas/FacilityRuleConfig"
+        sortOrder:
+          type: integer

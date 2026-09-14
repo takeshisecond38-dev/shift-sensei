@@ -1,0 +1,7 @@
+- [Drizzle date-only column range filters](drizzle-date-range-filters.md) — never build month/day ranges with string tricks like `date < 'YYYY-MM-32'`; Postgres rejects invalid date literals.
+- [DB package circular import](db-package-circular-import.md) — put the `db`/`pool` instance in its own `client.ts`, not `index.ts`, so in-package modules (e.g. a seed script) can import it without a cycle.
+- [orval/zod codegen pitfall](orval-zod-codegen.md) — freeform `type: object` in openapi.yaml emits `zod.looseObject()`, which doesn't exist in this project's pinned zod v3.25; use concrete schemas instead.
+- [Facility rule engine pattern](facility-rule-engine-pattern.md) — シフト先生's 施設ルール are data rows (ruleType+config) with one evaluator per ruleType, not hardcoded logic.
+- [AI相談 suggestion confirm/dismiss pattern](ai-consult-suggestion-pattern.md) — AI相談 previews changes on the assistant message; separate confirm endpoints apply/save, never auto-applied.
+- [vaul/radix Drawer e2e timing](vaul-drawer-e2e-timing.md) — bottom-sheet clicks right after open/close are flaky in Playwright; tell testers to wait ~500-800ms, don't assume it's an app bug.
+- [Vertical Japanese text (縦書き) with CSS](vertical-text-css.md) — writing-mode: vertical-rl + text-orientation: upright keeps latin/numerals upright & stacked; edit UI stays horizontal, only display renders vertical.
